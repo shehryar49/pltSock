@@ -6,8 +6,11 @@ Socket module for plutonium programming language.
 
 Compile using:
   For Linux:
+  
   g++ -shared socket-linx.cpp -o socket.so -fPIC
+  
   For Windows:
+  
   g++ -shared socket-win.cpp -o socket.dll
   
 And then copy the socket.so or socket.dll to modules folder.
