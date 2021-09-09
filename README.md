@@ -12,7 +12,7 @@ Compile using:
   
   For Windows:
   
-  g++ -shared socket-win.cpp -o socket.dll
+  g++ -shared socket-win.cpp -o socket.dll -lws2_32
   
 And then copy the socket.so or socket.dll to modules folder.
 The modules folder is present inside plutonium installation directory.
