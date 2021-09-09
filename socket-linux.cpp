@@ -48,6 +48,11 @@ extern "C"
     }
     return 0;//no error
   }
+  PltObject init(PltArgs args)
+  {
+	  PltObject ret;
+	  return ret;
+  }
   PltObject NewSocket(PltArgs args)
   {
     int e = validateArgTypes("ssi",args);
