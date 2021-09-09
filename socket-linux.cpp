@@ -188,27 +188,23 @@ extern "C"
   }
   PltObject Recv(PltObject& self,PltArgs args)
   {
-    if(args.size()!=0)
-      return Plt_Err(VALUE_ERROR,"0 arguments needed!.");
+    int e = validateArgTypes("i",args);
+    if(e==-1)
+      return Plt_Err(VALUE_ERROR,"1 argument needed!");
+    if(e!=0)
+      return Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
     NativeObject* p = (NativeObject*)self.ptr;
     Socket* s = (Socket*)p->ptr;
-    char msg[1024];
+    char msg[args[0].i+1];
     string data;
-    size_t read = recv(s->socket_desc,msg,1024,0);
+    size_t read = recv(s->socket_desc,msg,args[0].i,0);
     if( read< 0)
 	  {
       string errMsg = strerror(errno);
       return Plt_Err(UNKNOWN_ERROR,errMsg);
     }
     msg[read] = 0;
-    string A = msg;
-    data+=A;
-    while( (read = recv(s->socket_desc,msg,1024,0))>0)
-    {
-      msg[read] = 0;
-      A = msg;
-      data+=A;
-    }
+    data = A;
     PltObject ret = (string)data;
     return ret;
   }
