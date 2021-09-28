@@ -1,4 +1,4 @@
-#define DEBUG
+
 #ifndef PLTOBJECT_H_
 #define PLTOBJECT_H_
 #include <string>
