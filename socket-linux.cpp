@@ -1,7 +1,6 @@
 /*
 Created by Shahryar Ahmad.
 Socket Module for Plutonium Programming Language
-
 This module is not turing complete.But something is better than nothing. :)
 */
 #include <stdio.h>
@@ -24,78 +23,120 @@ struct Socket
   int ipfamily;
   int connMethod;
   int port;
+  bool open;
+
 };
 
 extern "C"
 {
-  PltObject Bind(PltObject&,PltArgs);
-  PltObject Connect(PltObject&,PltArgs);
-  PltObject Send(PltObject&,PltArgs);
-  PltObject Recv(PltObject&,PltArgs);
-  PltObject Listen(PltObject&,PltArgs);
-  PltObject Accept(PltObject&,PltArgs);
-  PltObject Close(PltObject&,PltArgs);
-  int validateArgTypes(string e,const vector<PltObject>& args)
+  void Bind(PltObject*,PltObject*,int,PltObject*);
+  void Connect(PltObject*,PltObject*,int,PltObject*);
+  void Send(PltObject*,PltObject*,int,PltObject*);
+  void Recv(PltObject*,PltObject*,int,PltObject*);
+  void SendTo(PltObject*,PltObject*,int,PltObject*);
+  void RecvFrom(PltObject*,PltObject*,int,PltObject*);
+  void Listen(PltObject*,PltObject*,int,PltObject*);
+  void Accept(PltObject*,PltObject*,int,PltObject*);
+  void Close(PltObject*,PltObject*,int,PltObject*);
+  void DestroySocket(PltObject*,PltObject*,int,PltObject*);
+
+  int validateArgTypes(string e,PltObject* args,int n)
   {
-    if(e.length()!=args.size())
+    if(e.length()!=n)
       return -1;//missing arguments
     int f = 0;
-    for(auto k: args)
+    int k = 0;
+    for(k=0;k<n;k+=1)
     {
-        if(k.type!=e[f])
+        if(args[k].type!=e[f])
           return f;//type mismatch for argument number f
         f+=1;
     }
     return 0;//no error
   }
-  PltObject init(PltArgs args)
+  void init(PltObject* args,int n,PltObject* rr)
   {
-	  PltObject ret;
-	  return ret;
+
   }
-  PltObject NewSocket(PltArgs args)
+  void getMacros(PltObject* args,int n,PltObject* rr)
   {
-    int e = validateArgTypes("ssi",args);
+    if(n!=0)
+    {
+      *rr = Plt_Err(ARGUMENT_ERROR,"Error zero arguments needed!");
+      return;
+    }
+    Dictionary* d = new Dictionary;
+    d->emplace(PltObjectFromString("AF_INET"),PltObjectFromInt(AF_INET));
+    d->emplace(PltObjectFromString("AF_INET6"),PltObjectFromInt(AF_INET6));
+    d->emplace(PltObjectFromString("SOCK_STREAM"),PltObjectFromInt(SOCK_STREAM));
+    d->emplace(PltObjectFromString("SOCK_DGRAM"),PltObjectFromInt(SOCK_DGRAM));
+    rr->type = 'c';
+    rr->ptr = (void*)d;
+
+  }
+  void DestroySocket(PltObject* self,PltObject* args,int n,PltObject* rr)
+  {
+    Dictionary* d = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*d)[PltObjectFromString(".internalPTR")].ptr;
+    delete s;
+  }
+  void NewSocket(PltObject* args,int n,PltObject* rr)
+  {
+    int e = validateArgTypes("iii",args,n);
     if(e==-1)
-      return Plt_Err(VALUE_ERROR,"3 arguments needed!");
+    {
+      *rr = Plt_Err(VALUE_ERROR,"3 arguments needed!");
+      return;
+    }
     if(e!=0)
-      return Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+       return;
+    }
     Socket* s = new Socket;
-    int a,b;
-    if(args[0].s=="AF_INET")
-      a = AF_INET;
-    if(args[1].s=="SOCK_STREAM")
-      b= SOCK_STREAM;
-    s->socket_desc = socket(a,b,0);
+    s->socket_desc = socket(args[0].i,args[1].i,0);
     int tr = 1;
     if (setsockopt(s->socket_desc,SOL_SOCKET,SO_REUSEADDR,&tr,sizeof(int)) == -1)
     {
       perror("setsockopt");
       exit(1);
     }
-    s->ipfamily = a;
-    s->connMethod = b;
-    NativeObject obj;
-    obj.ptr = (void*)s;
-    obj.attr.emplace((string)"bind",&Bind);
-    obj.attr.emplace((string)"connect",&Connect);
-    obj.attr.emplace((string)"send",&Send);
-    obj.attr.emplace((string)"recv",&Recv);
-    obj.attr.emplace((string)"listen",&Listen);
-    obj.attr.emplace((string)"accept",&Accept);
-    obj.attr.emplace((string)"close",&Close);
-    return obj;
+    s->ipfamily = args[0].i;
+    s->connMethod = args[1].i;
+    Dictionary* d = new Dictionary;
+    d->emplace(PltObjectFromString(".internalPTR"),PltObjectFromPointer((void*)s));
+    d->emplace(PltObjectFromString("bind"),PltObjectFromMethod(&Bind) );
+    d->emplace(PltObjectFromString("connect"),PltObjectFromMethod(&Connect) );
+    d->emplace(PltObjectFromString("send"),PltObjectFromMethod(&Send) );
+    d->emplace(PltObjectFromString("recv"),PltObjectFromMethod(&Recv) );
+    d->emplace(PltObjectFromString("listen"),PltObjectFromMethod(&Listen) );
+    d->emplace(PltObjectFromString("accept"),PltObjectFromMethod(&Accept) );
+    d->emplace(PltObjectFromString("close"),PltObjectFromMethod(&Close) );
+    d->emplace(PltObjectFromString(".destroy"),PltObjectFromMethod(&DestroySocket) );
+    if(s->connMethod==SOCK_DGRAM)
+    {
+      d->emplace(PltObjectFromString("sendto"),PltObjectFromMethod(&SendTo) );
+      d->emplace(PltObjectFromString("recvfrom"),PltObjectFromMethod(&RecvFrom) );
+    }
+    rr->type = 'c';
+    rr->ptr = (void*)d;
   }
-  PltObject Bind(PltObject& self,PltArgs args)
+  void Bind(PltObject* self,PltObject* args,int n,PltObject* rr)
   {
-    int e = validateArgTypes("si",args);
+    int e = validateArgTypes("si",args,n);
     if(e==-1)
-      return Plt_Err(VALUE_ERROR,"2 arguments needed!");
+    {
+      *rr = Plt_Err(VALUE_ERROR,"2 arguments needed!");
+      return;
+    }
     if(e!=0)
-      return Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+      return;
+    }
     struct sockaddr_in server;
-    NativeObject* p = (NativeObject*)self.ptr;
-    Socket* s = (Socket*)p->ptr;
+    Dictionary* p = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
     server.sin_family = s->ipfamily;
     server.sin_addr.s_addr = inet_addr(args[0].s.c_str());
     server.sin_port = htons( args[1].i );
@@ -103,65 +144,81 @@ extern "C"
     if( bind(s->socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
     {
 	    string errMsg = strerror(errno);
-      return Plt_Err(UNKNOWN_ERROR,errMsg);
+      *rr = Plt_Err(UNKNOWN_ERROR,errMsg);
     }
-    PltObject ret;
-    return ret;
   }
-  PltObject Listen(PltObject& self,PltArgs args)
+  void Listen(PltObject* self,PltObject* args,int n,PltObject* rr)
   {
-    int e = validateArgTypes("i",args);
+    int e = validateArgTypes("i",args,n);
     if(e==-1)
-      return Plt_Err(VALUE_ERROR,"1 argument needed!");
+    {
+      *rr = Plt_Err(VALUE_ERROR,"1 argument needed!");
+      return;
+    }
     if(e!=0)
-      return Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
-    NativeObject* p = (NativeObject*)self.ptr;
-    Socket* s = (Socket*)p->ptr;
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+      return;
+    }
+    Dictionary* p = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
     if(listen(s->socket_desc,args[0].i) < 0)
     {
       string errMsg = strerror(errno);
-      return Plt_Err(UNKNOWN_ERROR,errMsg);
+      *rr = Plt_Err(UNKNOWN_ERROR,errMsg);
     }
-    PltObject ret;
-    return ret;
   }
-  PltObject Accept(PltObject& self,PltArgs args)
+  void Accept(PltObject* self,PltObject* args,int n,PltObject* rr)
   {
-    if(args.size()!=0)
-      return Plt_Err(VALUE_ERROR,"0 arguments needed");
-    NativeObject* p = (NativeObject*)self.ptr;
-    Socket* s = (Socket*)p->ptr;
+    if(n!=0)
+    {
+      *rr = Plt_Err(VALUE_ERROR,"0 arguments needed");
+      return;
+    }
+    Dictionary* p = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
     struct sockaddr_in  client;
     int c = sizeof(client);
     int new_socket = accept(s->socket_desc, (struct sockaddr *)&client, (socklen_t*)&c);
   	if (new_socket<0)
 	  {
       string errMsg = strerror(errno);
-      return Plt_Err(UNKNOWN_ERROR,errMsg);
+      *rr = Plt_Err(UNKNOWN_ERROR,errMsg);
+      return;
   	}
     Socket* A = new Socket;
     A->socket_desc = new_socket;
     A->port = s->port;
     A->ipfamily = s->ipfamily;
     A->connMethod = s->connMethod;
-    NativeObject obj;
-    obj.ptr = (void*)A;
-    obj.attr.emplace((string)"bind",&Bind);
-    obj.attr.emplace((string)"connect",&Connect);
-    obj.attr.emplace((string)"send",&Send);
-    obj.attr.emplace((string)"recv",&Recv);
-    obj.attr.emplace((string)"close",&Close);
-    return obj;
+    Dictionary* d = new Dictionary;
+    d->emplace(PltObjectFromString(".internalPTR"),PltObjectFromPointer((void*)A));
+    d->emplace(PltObjectFromString("bind"),PltObjectFromMethod(&Bind) );
+    d->emplace(PltObjectFromString("connect"),PltObjectFromMethod(&Connect) );
+    d->emplace(PltObjectFromString("send"),PltObjectFromMethod(&Send) );
+    d->emplace(PltObjectFromString("recv"),PltObjectFromMethod(&Recv) );
+    d->emplace(PltObjectFromString("listen"),PltObjectFromMethod(&Listen) );
+    d->emplace(PltObjectFromString("accept"),PltObjectFromMethod(&Accept) );
+    d->emplace(PltObjectFromString("close"),PltObjectFromMethod(&Close) );
+    d->emplace(PltObjectFromString(".destroy"),PltObjectFromMethod(&DestroySocket) );
+    rr->type = 'c';
+    rr->ptr = (void*)d;
   }
-  PltObject Connect(PltObject& self,PltArgs args)
+  void Connect(PltObject* self,PltObject* args,int n,PltObject* rr)
   {
-    int e = validateArgTypes("si",args);
+    int e = validateArgTypes("si",args,n);
     if(e==-1)
-      return Plt_Err(VALUE_ERROR,"2 arguments needed!");
+    {
+      *rr = Plt_Err(VALUE_ERROR,"2 arguments needed!");
+      return;
+    }
     if(e!=0)
-      return Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
-    NativeObject* p = (NativeObject*)self.ptr;
-    Socket* s = (Socket*)p->ptr;
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+      return;
+    }
+    Dictionary* p = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
     struct sockaddr_in server;
     server.sin_addr.s_addr = inet_addr(args[0].s.c_str());
   	server.sin_family = s->ipfamily;
@@ -169,59 +226,139 @@ extern "C"
     if (connect(s->socket_desc , (struct sockaddr *)&server , sizeof(server)) < 0)
   	{
       string errMsg = strerror(errno);
-      return Plt_Err(UNKNOWN_ERROR,errMsg);
+      *rr = Plt_Err(UNKNOWN_ERROR,errMsg);
 	  }
-    PltObject ret;
-    return ret;
   }
-  PltObject Send(PltObject& self,PltArgs args)
+  void Send(PltObject* self,PltObject* args,int n,PltObject* rr)
   {
-    int e = validateArgTypes("s",args);
+    int e = validateArgTypes("s",args,n);
     if(e==-1)
-      return Plt_Err(VALUE_ERROR,"1 argument needed!");
+    {
+      *rr = Plt_Err(VALUE_ERROR,"1 argument needed!");
+      return;
+    }
     if(e!=0)
-      return Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
-    NativeObject* p = (NativeObject*)self.ptr;
-    Socket* s = (Socket*)p->ptr;
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+       return;
+    }
+      Dictionary* p = (Dictionary*)self->ptr;
+      Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
     if(send(s->socket_desc , args[0].s.c_str(),args[0].s.length() , 0) < 0)
 	  {
       string errMsg = strerror(errno);
-      return Plt_Err(UNKNOWN_ERROR,errMsg);
+      *rr = Plt_Err(UNKNOWN_ERROR,errMsg);
 	  }
-    PltObject ret;
-    return ret;
   }
-  PltObject Recv(PltObject& self,PltArgs args)
+  void Recv(PltObject* self,PltObject* args,int n,PltObject* rr)
   {
-    int e = validateArgTypes("i",args);
+    int e = validateArgTypes("i",args,n);
     if(e==-1)
-      return Plt_Err(VALUE_ERROR,"1 argument needed!");
+    {
+      *rr = Plt_Err(VALUE_ERROR,"1 argument needed!");
+      return;
+    }
     if(e!=0)
-      return Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
-    NativeObject* p = (NativeObject*)self.ptr;
-    Socket* s = (Socket*)p->ptr;
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+      return;
+    }
+    Dictionary* p = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
     char msg[args[0].i+1];
     string data;
     size_t read = recv(s->socket_desc,msg,args[0].i,0);
     if( read< 0)
 	  {
       string errMsg = strerror(errno);
-      return Plt_Err(UNKNOWN_ERROR,errMsg);
+      *rr = Plt_Err(UNKNOWN_ERROR,errMsg);
+      return;
     }
     msg[read] = 0;
-    data = A;
-    PltObject ret = (string)data;
-    return ret;
+    data = msg;
+    *rr = PltObjectFromString(data);
   }
-  PltObject Close(PltObject& self,PltArgs args)
+   void RecvFrom(PltObject* self,PltObject* args,int n,PltObject* rr)
   {
-    if(args.size()!=0)
-      return Plt_Err(VALUE_ERROR,"0 arguments needed!.");
-    NativeObject* p = (NativeObject*)self.ptr;
-    Socket* s = (Socket*)p->ptr;
+    int e = validateArgTypes("i",args,n);
+    if(e==-1)
+    {
+      *rr = Plt_Err(VALUE_ERROR,"1 argument needed!");
+      return;
+    }
+    if(e!=0)
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+      return;
+    }
+    Dictionary* p = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
+    char msg[args[0].i+1];
+    string data;
+    unsigned int len;
+    int read;
+    struct sockaddr_in cliaddr;
+    len = sizeof(cliaddr);  //len is value/resuslt
+   
+    read = recvfrom(s->socket_desc, (char *)msg, args[0].i, 
+                MSG_WAITALL, ( struct sockaddr *) &cliaddr,
+                &len);
+    msg[read] = '\0';
+    char *ip = inet_ntoa(cliaddr.sin_addr);
+    string IP = ip;
+    if( read< 0)
+	  {
+      string errMsg = strerror(errno);
+      *rr = Plt_Err(UNKNOWN_ERROR,errMsg);
+      return;
+    }
+    Dictionary* d = new Dictionary;
+    data = msg;
+    d->emplace(PltObjectFromString("addr"),PltObjectFromString(IP));
+    d->emplace(PltObjectFromString("data"),PltObjectFromString(data));
+    rr->type = 'c';
+    rr->ptr = (void*)d;
+  }
+   void SendTo(PltObject* self,PltObject* args,int n,PltObject* rr)
+  {
+    int e = validateArgTypes("ssi",args,n);
+    if(e==-1)
+    {
+      *rr = Plt_Err(VALUE_ERROR,"1 argument needed!");
+      return;
+    }
+    if(e!=0)
+    {
+      *rr = Plt_Err(TYPE_ERROR,"Argument "+to_string(e)+" is of invalid type.");
+       return;
+    }
+      Dictionary* p = (Dictionary*)self->ptr;
+      Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
+      int read;
+      unsigned int len;
+         struct sockaddr_in addr;
+          memset(&addr, 0, sizeof(addr));
+    // Filling server information
+    addr.sin_family = s->connMethod;
+    addr.sin_port = htons(args[2].i);
+    addr.sin_addr.s_addr = inet_addr(args[1].s.c_str());
+       
+    sendto(s->socket_desc, (const char *)args[0].s.c_str(), args[0].s.length(),
+        MSG_CONFIRM, (const struct sockaddr *) &(addr), 
+            sizeof(addr));
+  }
+  void Close(PltObject* self,PltObject* args,int n,PltObject* rr)
+  {
+    if(n!=0)
+    {
+      *rr = Plt_Err(VALUE_ERROR,"0 arguments needed!.");
+      return;
+    }
+    Dictionary* p = (Dictionary*)self->ptr;
+    Socket* s = (Socket*)(*p)[PltObjectFromString(".internalPTR")].ptr;
     close(s->socket_desc);
-    self = (int)0;
+    s->open = false;
     PltObject ret;
-    return ret;
+    *self = ret;//set socket object to nil
   }
 }
